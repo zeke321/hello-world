@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Distance Branches</title>
+  <style>
+    body, html {height:100%; margin:0; overflow:hidden; font-family: sans-serif;}
+    #canvas {position:relative; width:100%; height:100%;}
+      .node {position:absolute; padding:8px; background:#f0f0f0; border:1px solid #999; border-radius:4px; cursor:move;}
+      #center {left:50%; top:50%; transform:translate(-50%, -50%); cursor:default;}
+    .line-label {fill:#000; font-size:12px; pointer-events:none;}
+  </style>
+</head>
+<body>
+<div id="canvas">
+  <div id="center" class="node">
+    <input id="center-input" placeholder="Center plus code" size="35" />
+  </div>
+  <div id="branch1" class="node" style="left:70%; top:20%;">
+    <input class="branch-input" placeholder="Branch 1 plus code" size="30" />
+  </div>
+  <div id="branch2" class="node" style="left:20%; top:20%;">
+    <input class="branch-input" placeholder="Branch 2 plus code" size="30" />
+  </div>
+  <div id="branch3" class="node" style="left:20%; top:80%;">
+    <input class="branch-input" placeholder="Branch 3 plus code" size="30" />
+  </div>
+  <div id="branch4" class="node" style="left:70%; top:80%;">
+    <input class="branch-input" placeholder="Branch 4 plus code" size="30" />
+  </div>
+  <svg id="lines" width="100%" height="100%" style="position:absolute;top:0;left:0;pointer-events:none;">
+    <line id="line1" stroke="#333" stroke-width="2" />
+    <line id="line2" stroke="#333" stroke-width="2" />
+    <line id="line3" stroke="#333" stroke-width="2" />
+    <line id="line4" stroke="#333" stroke-width="2" />
+    <text id="label1" class="line-label"></text>
+    <text id="label2" class="line-label"></text>
+    <text id="label3" class="line-label"></text>
+    <text id="label4" class="line-label"></text>
+  </svg>
+</div>
+<script>
+function setupDrag(el){
+  let offsetX, offsetY, dragging=false;
+  el.addEventListener('mousedown', e=>{dragging=true; offsetX=e.offsetX; offsetY=e.offsetY;});
+  document.addEventListener('mousemove', e=>{if(!dragging) return; el.style.left=(e.pageX-offsetX)+'px'; el.style.top=(e.pageY-offsetY)+'px'; updateLines();});
+  document.addEventListener('mouseup', ()=>{dragging=false;});
+}
+
+  ['branch1','branch2','branch3','branch4'].forEach(id=>setupDrag(document.getElementById(id)));
+
+function getCenter(el){
+  const rect=el.getBoundingClientRect();
+  return {x: rect.left + rect.width/2, y: rect.top + rect.height/2};
+}
+
+function updateLines(){
+  const cCenter=getCenter(document.getElementById('center'));
+  for(let i=1;i<=4;i++){
+    const branch=document.getElementById('branch'+i);
+    const line=document.getElementById('line'+i);
+    const label=document.getElementById('label'+i);
+    const bCenter=getCenter(branch);
+    line.setAttribute('x1', cCenter.x); line.setAttribute('y1', cCenter.y);
+    line.setAttribute('x2', bCenter.x); line.setAttribute('y2', bCenter.y);
+    const midX=(cCenter.x+bCenter.x)/2; const midY=(cCenter.y+bCenter.y)/2;
+    label.setAttribute('x', midX); label.setAttribute('y', midY-5);
+    const dist = computeDistance(i);
+    label.textContent = dist ? dist.toFixed(2)+" km" : '';
+  }
+}
+
+const CODE_ALPHABET='23456789CFGHJMPQRVWX';
+function decodePlusCode(code){
+  code = code.toUpperCase();
+  const plusIndex = code.indexOf('+');
+  if(plusIndex === -1) return null;
+  let clean = code.substring(0, plusIndex) + code.substring(plusIndex+1);
+  if(clean.length < 8) return null;
+  clean = clean.padEnd(10, '0');
+  let lat=-90, lng=-180, res=20;
+  for(let i=0;i<10;i+=2){
+    const latVal = CODE_ALPHABET.indexOf(clean[i]);
+    const lngVal = CODE_ALPHABET.indexOf(clean[i+1]);
+    if(latVal<0 || lngVal<0) return null;
+    lat += latVal * res;
+    lng += lngVal * res;
+    res /= 20;
+  }
+  return {lat: lat + res/2, lng: lng + res/2};
+}
+
+function parseCoords(link){
+  if(!link) return null;
+  const plus = link.match(/[23456789CFGHJMPQRVWX]{2,}\+[23456789CFGHJMPQRVWX]{2,}/i);
+  if(plus) {
+    const coords = decodePlusCode(plus[0]);
+    if(coords) return coords;
+  }
+  const at = link.match(/@(-?[\d.]+),(-?[\d.]+)/);
+  if(at) return {lat: parseFloat(at[1]), lng: parseFloat(at[2])};
+  const q = link.match(/(-?[\d.]+),(-?[\d.]+)$/);
+  if(q) return {lat: parseFloat(q[1]), lng: parseFloat(q[2])};
+  return null;
+}
+
+function haversine(a,b){
+  const R=6371;
+  const dLat=(b.lat-a.lat)*Math.PI/180;
+  const dLng=(b.lng-a.lng)*Math.PI/180;
+  const la1=a.lat*Math.PI/180; const la2=b.lat*Math.PI/180;
+  const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+
+function computeDistance(i){
+  const centerLink=document.getElementById('center-input').value.trim();
+  const branchLink=document.querySelector(`#branch${i} .branch-input`).value.trim();
+  const c=parseCoords(centerLink); const b=parseCoords(branchLink);
+  if(c && b) return haversine(c,b);
+  return null;
+}
+
+document.querySelectorAll('input').forEach(inp=>inp.addEventListener('input', updateLines));
+updateLines();
+</script>
+</body>
+</html>
